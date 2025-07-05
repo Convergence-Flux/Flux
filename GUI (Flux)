@@ -1,133 +1,128 @@
-module intelligence_gui
+module gui
 
-// I/O Ports
-const OUT_PORT = 0x01
-const IN_PORT = 0x02
-const CLEAR_PORT = 0x03
-const SLEEP_PORT = 0xFE
+import stdio
+import stdmem
 
-const VERSION = "0.1.0"
+// --- Basic Types ---
+type Point {
+    x: int
+    y: int
+}
 
-// Entry
-fn main() {
-    loop {
-        clear_screen()
-        draw_gui()
-        let choice = get_key()
-        handle_choice(choice)
+type Size {
+    width: int
+    height: int
+}
+
+type Rect {
+    origin: Point
+    size: Size
+}
+
+// --- GUI Element Base Type ---
+type Element {
+    id: int
+    rect: Rect
+    visible: bool
+    draw: fn(Element)
+    on_click: fn(Element, Point)
+}
+
+// --- Global GUI State ---
+let elements: [Element; 64]
+let element_count: int = 0
+
+// --- API: Create Element ---
+fn create_element(rect: Rect, draw_fn: fn(Element), click_fn: fn(Element, Point)) -> int {
+    let id = element_count
+    elements[id] = Element {
+        id: id
+        rect: rect
+        visible: true
+        draw: draw_fn
+        on_click: click_fn
+    }
+    element_count += 1
+    return id
+}
+
+// --- Draw All ---
+fn draw_all() {
+    for i in 0..element_count {
+        if elements[i].visible {
+            elements[i].draw(elements[i])
+        }
     }
 }
 
-// Draw GUI Screen
-fn draw_gui() {
-    draw_border()
-    draw_title("Intelligence OS")
-    draw_buttons()
-    draw_footer("Press 1–6 to enter a module")
-}
-
-// Draw outer border
-fn draw_border() {
-    print("╔════════════════════════════════════════════════════╗\n")
-    let i = 0
-    while i < 20 {
-        print("║                                                    ║\n")
-        i += 1
-    }
-    print("╚════════════════════════════════════════════════════╝\n")
-}
-
-// Centered title
-fn draw_title(title) {
-    move_cursor(2, 25)
-    print("[ ")
-    print(title)
-    print(" ]\n")
-    move_cursor(3, 22)
-    print("Version: ")
-    print(VERSION)
-    print("\n")
-}
-
-// Draw buttons
-fn draw_buttons() {
-    move_cursor(6, 10); print("[1] Supply Chain")
-    move_cursor(8, 10); print("[2] Human Resources")
-    move_cursor(10, 10); print("[3] Marketing")
-    move_cursor(6, 35); print("[4] Accounting")
-    move_cursor(8, 35); print("[5] Finance")
-    move_cursor(10, 35); print("[6] Economics")
-}
-
-// Footer instructions
-fn draw_footer(msg) {
-    move_cursor(18, 10)
-    print(msg)
-}
-
-// Respond to input
-fn handle_choice(choice) {
-    clear_screen()
-    if choice == '1' { launch_module("Supply Chain") }
-    elif choice == '2' { launch_module("Human Resources") }
-    elif choice == '3' { launch_module("Marketing") }
-    elif choice == '4' { launch_module("Accounting") }
-    elif choice == '5' { launch_module("Finance") }
-    elif choice == '6' { launch_module("Economics") }
-    else {
-        print("Invalid option.\n")
-        sleep(1000)
+// --- Event: Click ---
+fn handle_click(pos: Point) {
+    for i in 0..element_count {
+        let e = elements[i]
+        let r = e.rect
+        if e.visible and pos.x >= r.origin.x and pos.y >= r.origin.y and
+           pos.x < r.origin.x + r.size.width and pos.y < r.origin.y + r.size.height {
+            e.on_click(e, pos)
+        }
     }
 }
 
-// Module screen
-fn launch_module(name) {
-    draw_border()
-    move_cursor(2, 22)
-    print("=== ")
-    print(name)
-    print(" ===\n")
-    move_cursor(5, 10)
-    print("This module is not implemented yet.\n")
-    move_cursor(7, 10)
-    print("Press any key to return to the GUI.")
-    get_key()
+// --- Drawing Primitives (abstract) ---
+fn draw_rect(x: int, y: int, w: int, h: int, color: int) {
+    stdio.print("DrawRect at (")
+    stdio.print_int(x)
+    stdio.print(", ")
+    stdio.print_int(y)
+    stdio.print(") size ")
+    stdio.print_int(w)
+    stdio.print("x")
+    stdio.print_int(h)
+    stdio.print(" color ")
+    stdio.print_int(color)
+    stdio.print("\n")
 }
 
-// -- BIOS I/O Primitives --
-
-fn clear_screen() {
-    out(CLEAR_PORT, 1)
+fn draw_text(x: int, y: int, text: str) {
+    stdio.print("DrawText at (")
+    stdio.print_int(x)
+    stdio.print(", ")
+    stdio.print_int(y)
+    stdio.print("): ")
+    stdio.print(text)
+    stdio.print("\n")
 }
 
-fn print(str) {
-    let i = 0
-    while str[i] != 0 {
-        out(OUT_PORT, str[i])
-        i += 1
-    }
+// --- GUI Components ---
+
+// Label
+fn draw_label(e: Element) {
+    draw_text(e.rect.origin.x + 2, e.rect.origin.y + 2, "Label")
 }
 
-fn get_key() -> byte {
-    return in(IN_PORT)
+fn no_click(e: Element, p: Point) {}
+
+// Button
+fn draw_button(e: Element) {
+    draw_rect(e.rect.origin.x, e.rect.origin.y, e.rect.size.width, e.rect.size.height, 0xAAAAAA)
+    draw_text(e.rect.origin.x + 4, e.rect.origin.y + 4, "Button")
 }
 
-fn sleep(ms) {
-    out(SLEEP_PORT, ms)
+fn button_click(e: Element, p: Point) {
+    stdio.print("Button clicked!\n")
 }
 
-// Move cursor to row, col (BIOS simulation — optional implementation)
-fn move_cursor(row, col) {
-    // Print newline until we reach row
-    let r = 0
-    while r < row {
-        print("\n")
-        r += 1
-    }
-    // Print spaces until we reach column
-    let c = 0
-    while c < col {
-        print(" ")
-        c += 1
-    }
+// --- Public API ---
+
+fn init_gui() {
+    element_count = 0
+}
+
+fn add_label(x: int, y: int, w: int, h: int) -> int {
+    let r = Rect { origin: Point{x: x, y: y}, size: Size{width: w, height: h} }
+    return create_element(r, draw_label, no_click)
+}
+
+fn add_button(x: int, y: int, w: int, h: int) -> int {
+    let r = Rect { origin: Point{x: x, y: y}, size: Size{width: w, height: h} }
+    return create_element(r, draw_button, button_click)
 }
